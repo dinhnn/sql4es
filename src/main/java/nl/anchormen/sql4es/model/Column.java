@@ -1,6 +1,7 @@
 package nl.anchormen.sql4es.model;
 
 import java.sql.Types;
+import java.util.List;
 
 import nl.anchormen.sql4es.model.expression.ICalculation;
 
@@ -12,21 +13,25 @@ import nl.anchormen.sql4es.model.expression.ICalculation;
  */
 public class Column implements Comparable<Column>{
 	
-	public enum Operation {NONE, AVG, SUM, MIN, MAX, COUNT, HIGHLIGHT}
+	public enum Operation {NONE, AVG, SUM, MIN, MAX, COUNT, HIGHLIGHT,HISTOGRAM,DATE_HISTOGRAM}
 	
 	private String columnName;
 	private String tableName;
 	private String tableAlias;
 	private Operation op = Operation.NONE;
+	private List<Object> opArgs;
 	private String alias = null;
 	private int index = -1;
 	private int sqlType = Types.OTHER;
 	private ICalculation calculation = null;
 	private boolean isVisible = true;
-	
 	public Column(String columnName, Operation op) {
+		this(columnName,op,null);
+	}
+	public Column(String columnName, Operation op,List<Object>opArgs) {
 		this.columnName = columnName;
 		this.op = op;
+		this.opArgs = opArgs;
 		if(columnName.equals("*") && op == Operation.COUNT) alias = "count(*)";
 		else if(columnName.equals("1") && op == Operation.COUNT) alias = "count(1)";
 		
@@ -38,6 +43,8 @@ public class Column implements Comparable<Column>{
 			case SUM: sqlType = Types.DOUBLE; break;
 			case AVG: sqlType = Types.DOUBLE; break;
 			case HIGHLIGHT: sqlType = Types.ARRAY; break;
+			case HISTOGRAM: sqlType = Types.OTHER; break;
+			case DATE_HISTOGRAM: sqlType = Types.TIMESTAMP; break;
 			default: sqlType = Types.OTHER;
 		}
 		if(calculation != null) sqlType = Types.DOUBLE;
@@ -95,7 +102,15 @@ public class Column implements Comparable<Column>{
 	public Operation getOp() {
 		return op;
 	}
-	
+
+	public List<Object> getOpArgs() {
+		return opArgs;
+	}
+
+	public void setOpArgs(List<Object> opArgs) {
+		this.opArgs = opArgs;
+	}
+
 	/**
 	 * Gets the alias of this column
 	 * @return the alias or NULL if not set

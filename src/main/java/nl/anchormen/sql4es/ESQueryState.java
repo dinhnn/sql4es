@@ -52,6 +52,8 @@ public class ESQueryState{
 	// state definition
 	private int maxRows = -1;
 	private SearchRequestBuilder request;
+	private SearchRequestBuilder requestExecutor;
+
 	private ESResultSet result = null;
 	private SearchResponse esResponse;
 	private Heading heading = new Heading();;
@@ -86,6 +88,7 @@ public class ESQueryState{
 			client.prepareClearScroll().addScrollId(this.esResponse.getScrollId()).execute();
 		}
 		this.request = client.prepareSearch(indices);
+		this.requestExecutor = client.prepareSearch(indices);
 		Map<String, Map<String, Integer>> esInfo = (Map<String, Map<String, Integer>>)Utils.getObjectProperty(props, Utils.PROP_TABLE_COLUMN_MAP);
 		ParseResult parseResult =  parser.parse(sql, query, maxRows, this.statement.getConnection().getClientInfo(), esInfo);
 		buildQuery(request, parseResult);
@@ -182,8 +185,12 @@ public class ESQueryState{
 	ResultSet execute(boolean useLateral) throws SQLException{
 		if(request == null) throw new SQLException("Unable to execute query because it has not correctly been parsed");
 		//System.out.println(request);
-		this.esResponse = this.request.execute().actionGet();
-		//System.out.println(esResponse);
+		this.requestExecutor.setSource(request.toString());
+
+		//this.esResponse = this.client.prepareSearch(this.statement.getConnection().getSchema()).setSource(request.toString()).execute().actionGet();
+		this.esResponse = this.requestExecutor.execute().actionGet();
+
+		System.out.println(esResponse);
 		ESResultSet rs = convertResponse(useLateral);
 		if(rs == null) throw new SQLException("No result found for this query");
 		if(this.result != null) this.result.close();

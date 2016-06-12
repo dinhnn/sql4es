@@ -5,6 +5,8 @@ import java.util.List;
 
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.bucket.filter.InternalFilter;
+import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
+import org.elasticsearch.search.aggregations.bucket.histogram.InternalDateHistogram;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
 
@@ -27,8 +29,10 @@ public class SearchAggregationParser {
 	 * @throws SQLException
 	 */
 	public void parseAggregation(Aggregation agg, ESResultSet rs) throws SQLException{
-		if(agg instanceof Terms){
-			dfsAggregations((Terms)agg, rs, rs.getNewRow());
+		if(agg instanceof Terms) {
+			dfsAggregations((Terms) agg, rs, rs.getNewRow());
+		}else if(agg instanceof Histogram){
+			dfsAggregations((Histogram) agg, rs, rs.getNewRow());
 		}else if (agg instanceof InternalFilter){
 			processFilterAgg((InternalFilter)agg, rs);
 		}else throw new SQLException ("Unknown aggregation type "+agg.getClass().getName());
@@ -74,7 +78,39 @@ public class SearchAggregationParser {
 			currentRow = Utils.clone(row);
 		}
 	}
-	
+	private void dfsAggregations(Histogram histogram, ESResultSet rs, List<Object> row) throws SQLException{
+		List<Object> currentRow = Utils.clone(row);
+		String columnName = histogram.getName();
+		if(!rs.getHeading().hasLabel(columnName)) throw new SQLException("Unable to identify column for aggregation named "+columnName);
+		Column aggCol = rs.getHeading().getColumnByLabel(columnName);
+		for(Histogram.Bucket bucket : histogram.getBuckets()){
+			boolean metricAggs = false;
+			List<Aggregation> aggs = bucket.getAggregations().asList();
+			if(aggs.size() == 0){
+				currentRow.set(aggCol.getIndex(), bucket.getKey());
+				metricAggs = true;
+			}else for(Aggregation agg : bucket.getAggregations().asList()){
+				if(agg instanceof Terms){
+					currentRow.set(aggCol.getIndex(), bucket.getKey());
+					dfsAggregations((Terms)agg, rs, currentRow);
+				}else{
+					if(metricAggs == false){
+						currentRow.set(aggCol.getIndex(), bucket.getKey());
+						metricAggs = true;
+					}
+					String metricName = agg.getName();
+					if(!rs.getHeading().hasLabel(metricName)) throw new SQLException("Unable to identify column for aggregation named "+metricName);
+					Column metricCol = rs.getHeading().getColumnByLabel(metricName);
+					currentRow.set(metricCol.getIndex(), agg.getProperty("value"));
+				}
+			}
+			if(metricAggs){
+				rs.add(currentRow);
+				currentRow = Utils.clone(row);
+			}
+			currentRow = Utils.clone(row);
+		}
+	}
 	/**
 	 * Parse an aggregation performed without grouping.
 	 * @param filter

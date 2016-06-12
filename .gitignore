@@ -1,5 +1,8 @@
 #mac
 .DS_Store
+#Intelij
+*.iml
+.idea/
 
 #Eclipse
 .metadata
