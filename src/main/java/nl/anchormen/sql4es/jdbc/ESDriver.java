@@ -40,7 +40,7 @@ public class ESDriver implements Driver{
 	public Connection connect(String url, Properties info) throws SQLException {
 		Object[] conInfo = parseURL(url, info);
 		String host = (String)conInfo[0];
-		int port = (int)conInfo[1];
+		int port = (Integer)conInfo[1];
 		String index = (String)conInfo[2];
 		Properties props = (Properties)conInfo[3];
 		return new ESConnection(host, port, index, props);

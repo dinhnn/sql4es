@@ -13,7 +13,7 @@ import nl.anchormen.sql4es.model.expression.ICalculation;
  */
 public class Column implements Comparable<Column>{
 	
-	public enum Operation {NONE, AVG, SUM, MIN, MAX, COUNT, HIGHLIGHT,HISTOGRAM,DATE_HISTOGRAM}
+	public enum Operation {NONE, AVG, SUM, MIN, MAX, COUNT, HIGHLIGHT,DATE_HISTOGRAM}
 	
 	private String columnName;
 	private String tableName;
@@ -43,7 +43,6 @@ public class Column implements Comparable<Column>{
 			case SUM: sqlType = Types.DOUBLE; break;
 			case AVG: sqlType = Types.DOUBLE; break;
 			case HIGHLIGHT: sqlType = Types.ARRAY; break;
-			case HISTOGRAM: sqlType = Types.OTHER; break;
 			case DATE_HISTOGRAM: sqlType = Types.TIMESTAMP; break;
 			default: sqlType = Types.OTHER;
 		}

@@ -1,19 +1,20 @@
 package nl.anchormen.sql4es.parse.se;
 
+import java.sql.Date;
 import java.sql.SQLException;
 import java.util.List;
 
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.bucket.filter.InternalFilter;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
-import org.elasticsearch.search.aggregations.bucket.histogram.InternalDateHistogram;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
+import org.joda.time.DateTime;
 
 import nl.anchormen.sql4es.ESResultSet;
 import nl.anchormen.sql4es.model.Column;
-import nl.anchormen.sql4es.model.Utils;
 import nl.anchormen.sql4es.model.Column.Operation;
+import nl.anchormen.sql4es.model.Utils;
 
 /**
  * Parses aggregation part of elasticsearch result. 
@@ -95,13 +96,24 @@ public class SearchAggregationParser {
 					dfsAggregations((Terms)agg, rs, currentRow);
 				}else{
 					if(metricAggs == false){
-						currentRow.set(aggCol.getIndex(), bucket.getKey());
+						Object key = bucket.getKey();
+						if(key instanceof DateTime){
+							key = new Date(((DateTime)key).getMillis());
+						}
+						currentRow.set(aggCol.getIndex(),key);
 						metricAggs = true;
 					}
 					String metricName = agg.getName();
 					if(!rs.getHeading().hasLabel(metricName)) throw new SQLException("Unable to identify column for aggregation named "+metricName);
 					Column metricCol = rs.getHeading().getColumnByLabel(metricName);
-					currentRow.set(metricCol.getIndex(), agg.getProperty("value"));
+					Object value = agg.getProperty("value");					
+					if(value instanceof Number){
+						double d = ((Number)value).doubleValue();
+						if(Double.isNaN(d)||Double.isInfinite(d)){
+							value = null;
+						}							
+					}
+					currentRow.set(metricCol.getIndex(),value);
 				}
 			}
 			if(metricAggs){

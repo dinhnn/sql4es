@@ -184,12 +184,10 @@ public class ESQueryState{
 	 */
 	ResultSet execute(boolean useLateral) throws SQLException{
 		if(request == null) throw new SQLException("Unable to execute query because it has not correctly been parsed");
-		//System.out.println(request);
+		System.out.println(request);
 		this.requestExecutor.setSource(request.toString());
-
 		//this.esResponse = this.client.prepareSearch(this.statement.getConnection().getSchema()).setSource(request.toString()).execute().actionGet();
 		this.esResponse = this.requestExecutor.execute().actionGet();
-
 		System.out.println(esResponse);
 		ESResultSet rs = convertResponse(useLateral);
 		if(rs == null) throw new SQLException("No result found for this query");

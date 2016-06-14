@@ -2,12 +2,12 @@ package nl.anchormen.sql4es.parse.sql;
 
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
 import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.NestedQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.joda.time.DateTimeZone;
@@ -15,6 +15,7 @@ import org.joda.time.LocalDate;
 import org.joda.time.LocalTime;
 
 import com.facebook.presto.sql.tree.ArithmeticUnaryExpression;
+import com.facebook.presto.sql.tree.ArithmeticUnaryExpression.Sign;
 import com.facebook.presto.sql.tree.AstVisitor;
 import com.facebook.presto.sql.tree.BooleanLiteral;
 import com.facebook.presto.sql.tree.ComparisonExpression;
@@ -30,6 +31,10 @@ import com.facebook.presto.sql.tree.IsNullPredicate;
 import com.facebook.presto.sql.tree.LikePredicate;
 import com.facebook.presto.sql.tree.LogicalBinaryExpression;
 import com.facebook.presto.sql.tree.LogicalBinaryExpression.Type;
+import com.facebook.presto.sql.tree.LongLiteral;
+import com.facebook.presto.sql.tree.NotExpression;
+import com.facebook.presto.sql.tree.QualifiedNameReference;
+import com.facebook.presto.sql.tree.StringLiteral;
 
 import nl.anchormen.sql4es.QueryState;
 import nl.anchormen.sql4es.model.Column;
@@ -37,12 +42,6 @@ import nl.anchormen.sql4es.model.Heading;
 import nl.anchormen.sql4es.model.QuerySource;
 import nl.anchormen.sql4es.model.QueryWrapper;
 import nl.anchormen.sql4es.model.Utils;
-
-import com.facebook.presto.sql.tree.LongLiteral;
-import com.facebook.presto.sql.tree.NotExpression;
-import com.facebook.presto.sql.tree.QualifiedNameReference;
-import com.facebook.presto.sql.tree.StringLiteral;
-import com.facebook.presto.sql.tree.ArithmeticUnaryExpression.Sign;
 
 /**
  * A Presto {@link AstVisitor} implementation that parses WHERE clauses
@@ -138,7 +137,6 @@ public class WhereParser extends AstVisitor<QueryWrapper, QueryState>{
 		String field = getVariableName(compareExp.getLeft());
 		FieldAndType fat = getFieldAndType(field, state);
 		field = fat.getFieldName();
-
 		if(compareExp.getRight() instanceof QualifiedNameReference || compareExp.getRight() instanceof DereferenceExpression){
 			state.addException("Matching two columns is not supported : "+compareExp);
 			return null;
@@ -229,7 +227,7 @@ public class WhereParser extends AstVisitor<QueryWrapper, QueryState>{
 	 * @param state
 	 * @return a Long, Boolean, Double or String object
 	 */
-	private Object getLiteralValue(Expression expression, QueryState state){
+	private Object getLiteralValue(Expression expression, final QueryState state){
 		if(expression instanceof LongLiteral) return ((LongLiteral)expression).getValue();
 		else if(expression instanceof BooleanLiteral) return ((BooleanLiteral)expression).getValue();
 		else if(expression instanceof DoubleLiteral) return ((DoubleLiteral)expression).getValue();
@@ -249,7 +247,123 @@ public class WhereParser extends AstVisitor<QueryWrapper, QueryState>{
 			return num;
 		} else if(expression instanceof FunctionCall){
 			FunctionCall fc = (FunctionCall)expression;
-			if(fc.getName().toString().equals("now")) return new Date();
+			List<Expression>args = fc.getArguments();
+			List<Object> opArgs = new ArrayList<>();
+      for (int i = 0; i < args.size(); i++) {
+        opArgs.add(args.get(i).accept(new AstVisitor() {
+          @Override
+          protected Object visitExpression(Expression node, Object context) {
+            if (node instanceof StringLiteral) {
+              return ((StringLiteral) node).getValue();
+            }
+            if (node instanceof LongLiteral) {
+              return ((LongLiteral) node).getValue();
+            }
+            state.addException("Unable to parse type " + node.getClass() + " in Select");
+            return null;
+          }
+        }, state));
+      }
+			if(fc.getName().toString().equals("now")){
+				if(args==null||args.size()==0){
+					return System.currentTimeMillis();
+				} else {
+					Object arg = opArgs.get(0);
+					if(arg instanceof Number){
+						return new Date(System.currentTimeMillis()-((Number)arg).longValue());
+					} else if(arg instanceof String){
+						Calendar cal = Calendar.getInstance();
+						String str = (String)arg;
+						boolean round = false;
+						int ofs = 0,end=str.length();
+						if(str.startsWith("~")){
+							round=true;
+							ofs++;
+						}
+						char unit=0;
+						if(str.length()>ofs){
+							unit = str.charAt(str.length()-1);
+							if(!Character.isDigit(unit)){
+								end--;
+							}
+						}
+						int amount;
+						try{
+							amount = Integer.parseInt(str.substring(ofs,end));
+						}catch(NumberFormatException e){
+							amount = 0;
+						}
+						
+						switch(unit){
+						case 's':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+							}
+							cal.add(Calendar.SECOND,amount);							
+							break;
+						case 'm':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+								cal.set(Calendar.SECOND,0);
+							}
+							cal.add(Calendar.MINUTE,amount);
+							break;
+						case 'h':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+								cal.set(Calendar.SECOND,0);
+								cal.set(Calendar.MINUTE,0);
+							}
+							cal.add(Calendar.HOUR_OF_DAY,amount);							
+							break;
+						case 'd':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+								cal.set(Calendar.SECOND,0);
+								cal.set(Calendar.MINUTE,0);
+								cal.set(Calendar.HOUR_OF_DAY,0);
+							}
+							cal.add(Calendar.DAY_OF_MONTH,amount);
+							
+							break;
+						case 'w':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+								cal.set(Calendar.SECOND,0);
+								cal.set(Calendar.MINUTE,0);
+								cal.set(Calendar.HOUR_OF_DAY,0);
+							}
+							cal.add(Calendar.DAY_OF_MONTH,7*amount);
+							break;
+						case 'M':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+								cal.set(Calendar.SECOND,0);
+								cal.set(Calendar.MINUTE,0);
+								cal.set(Calendar.HOUR_OF_DAY,0);
+								cal.set(Calendar.DAY_OF_MONTH,1);
+							}
+							cal.add(Calendar.MONTH,amount);							
+							break;
+						case 'y':
+							if(round){
+								cal.set(Calendar.MILLISECOND,0);
+								cal.set(Calendar.SECOND,0);
+								cal.set(Calendar.MINUTE,0);
+								cal.set(Calendar.HOUR_OF_DAY,0);
+								cal.set(Calendar.DAY_OF_MONTH,1);
+								cal.set(Calendar.MONTH,0);
+							}
+							cal.add(Calendar.YEAR,amount);
+							break;
+						}						
+						return cal.getTime().getTime();
+					} else {
+						return System.currentTimeMillis();
+					}
+          
+				}
+			}
 			else state.addException("Function '"+fc.getName()+"' is not supported");
 		}else if(expression instanceof CurrentTime){
 			CurrentTime ct = (CurrentTime)expression;

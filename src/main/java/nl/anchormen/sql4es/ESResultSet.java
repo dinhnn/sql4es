@@ -566,7 +566,7 @@ public class ESResultSet implements ResultSet {
 
 	@Override
 	public boolean isFirst() throws SQLException {
-		return cursor == 1 && rows.size() > 0;
+		return cursor == 0 && rows.size() > 0;
 	}
 
 	@Override
@@ -586,7 +586,7 @@ public class ESResultSet implements ResultSet {
 
 	@Override
 	public boolean first() throws SQLException {
-		cursor = 1;
+		cursor = 0;
 		return isFirst();
 	}
 
@@ -598,13 +598,16 @@ public class ESResultSet implements ResultSet {
 
 	@Override
 	public int getRow() throws SQLException {
-		return cursor;
+		return cursor+1;
 	}
 
 	@Override
 	public boolean absolute(int row) throws SQLException {
-		if(row >=0 && row < rows.size()){
-			cursor = row;
+		if(row<0){
+			cursor = Math.max(0,rows.size()+row);
+			return true;
+		} else if(row>0 && row <= rows.size()){
+			cursor = row-1;
 			return true;
 		}
 		return false;
@@ -622,7 +625,7 @@ public class ESResultSet implements ResultSet {
 
 	@Override
 	public boolean previous() throws SQLException {
-		if(cursor - 1 > -1){
+		if(cursor > 0){
 			cursor--;
 			return true;
 		}

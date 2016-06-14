@@ -118,7 +118,7 @@ public class ESConnection implements Connection{
 			}
 			
 			// check if index exists
-			if(index != null){
+			if(index != null && !index.endsWith("-*")){
 				boolean indexExists = client.admin().indices().exists(new IndicesExistsRequest(index)).actionGet().isExists();
 				if(!indexExists) throw new SQLException("Index or Alias '"+index+"' does not exist");
 			}

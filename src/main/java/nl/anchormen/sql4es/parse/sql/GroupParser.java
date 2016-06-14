@@ -4,10 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.facebook.presto.sql.tree.FunctionCall;
-import com.facebook.presto.sql.tree.LongLiteral;
-import com.facebook.presto.sql.tree.StringLiteral;
-import javafx.beans.binding.ListExpression;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
@@ -17,13 +13,16 @@ import org.elasticsearch.search.aggregations.bucket.terms.TermsBuilder;
 
 import com.facebook.presto.sql.tree.AstVisitor;
 import com.facebook.presto.sql.tree.Expression;
+import com.facebook.presto.sql.tree.FunctionCall;
 import com.facebook.presto.sql.tree.GroupingElement;
+import com.facebook.presto.sql.tree.LongLiteral;
+import com.facebook.presto.sql.tree.StringLiteral;
 
 import nl.anchormen.sql4es.QueryState;
 import nl.anchormen.sql4es.model.Column;
+import nl.anchormen.sql4es.model.Column.Operation;
 import nl.anchormen.sql4es.model.Heading;
 import nl.anchormen.sql4es.model.Utils;
-import nl.anchormen.sql4es.model.Column.Operation;
 
 /**
  * A Presto {@link AstVisitor} implementation that parses GROUP BY clauses
@@ -32,7 +31,7 @@ import nl.anchormen.sql4es.model.Column.Operation;
  */
 public class GroupParser extends SelectParser {
 
-  public AggregationBuilder parse(List<GroupingElement> elements, QueryState state) {
+  public AggregationBuilder parse(List<GroupingElement> elements,final QueryState state) {
     List<Column> groups = new ArrayList<Column>();
     for (GroupingElement grouping : elements) {
       for (Set<Expression> expressions : grouping.enumerateGroupingSets()) {
@@ -42,8 +41,7 @@ public class GroupParser extends SelectParser {
             List<Expression> args = ((FunctionCall) e).getArguments();
             if (args.size() > 1) {
               List<Object> opArgs = new ArrayList<>();
-              for (int i = 1; i < args.size(); i++) {
-                System.out.print(args.get(i).getClass());
+              for (int i = 1; i < args.size(); i++) {                
                 opArgs.add(args.get(i).accept(new AstVisitor() {
                   @Override
                   protected Object visitExpression(Expression node, Object context) {
@@ -68,7 +66,7 @@ public class GroupParser extends SelectParser {
 
     // to find case sensitive group by definitions which ES needs
     for (Column groupby : groups) {
-      if (groupby.getOp() != Operation.NONE && groupby.getOp() != Operation.HISTOGRAM && groupby.getOp() != Operation.DATE_HISTOGRAM) {
+      if (groupby.getOp() != Operation.NONE && groupby.getOp() != Operation.DATE_HISTOGRAM) {
         state.addException("Can not use function '" + groupby.getAggName() + "' as GROUP BY, please use an alias to group by a function");
         return null;
       }
@@ -108,7 +106,52 @@ public class GroupParser extends SelectParser {
         break;
       case DATE_HISTOGRAM:
         DateHistogramBuilder db = AggregationBuilders.dateHistogram(agg.getAggName()).field(agg.getColumn());
-        db.interval(((Number) column.getOpArgs().get(0)).longValue());
+        long interval;
+        Object arg = column.getOpArgs().get(0);
+        if(arg instanceof Number){
+        	interval = ((Number)arg).longValue();
+        } else if(arg instanceof String){
+        	String str = (String)arg;
+        	char unit=0;
+        	int end = str.length();
+        	if(str.length()>0){
+						unit = str.charAt(end-1);
+						if(!Character.isDigit(unit)){
+							end--;
+						}
+        	}
+					try{
+						interval = Integer.parseInt(str.substring(0,end));
+					}catch(NumberFormatException e){
+						interval = 24*60*6000;;
+					}
+					switch(unit){
+					case 's':
+						interval*=1000;
+						break;
+					case 'm':
+						interval*=60000;						
+						break;
+					case 'h':
+						interval*=60*60000;													
+						break;
+					case 'd':
+						interval*=24*60*60000;
+						break;
+					case 'w':
+						interval*=7*24*60*60000;
+						break;
+					case 'M':
+						interval*=30*24*60*60000;
+						break;
+					case 'y':
+						interval*=365*24*60*60000;
+						break;
+					}
+        } else {
+        	interval = 24*60*6000;;
+        }
+        db.interval(interval);
         result = db;
         break;
     }
