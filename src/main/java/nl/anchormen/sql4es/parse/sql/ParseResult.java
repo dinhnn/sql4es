@@ -14,6 +14,7 @@ import nl.anchormen.sql4es.model.expression.IComparison;
 
 public class ParseResult {
 
+	private ParseResult parent;
 	private Heading heading;
 	private List<QuerySource> sources;
 	private QueryBuilder query;
@@ -38,7 +39,15 @@ public class ParseResult {
 		this.useCache = useCache;
 		this.requestScore = requestScore;
 	}
-	
+
+	public void setParent(ParseResult parent) {
+		this.parent = parent;
+	}
+
+	public ParseResult getParent() {
+		return parent;
+	}
+
 	public ParseResult(SQLException exception){
 		this.exception = exception;
 	}

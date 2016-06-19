@@ -83,7 +83,7 @@ public class ESQueryState{
 	 * @throws SQLException
 	 */
 	@SuppressWarnings("unchecked")
-	public void buildRequest(String sql, QueryBody query, String... indices) throws SQLException {
+	public ParseResult buildRequest(String sql, QueryBody query, String... indices) throws SQLException {
 		if(this.esResponse != null && this.esResponse.getScrollId() != null){
 			client.prepareClearScroll().addScrollId(this.esResponse.getScrollId()).execute();
 		}
@@ -104,6 +104,7 @@ public class ESQueryState{
 						Utils.getIntProp(props, Utils.PROP_FRAGMENT_NUMBER, 1));
 			}
 		}
+		return parseResult;
 	}
 	
 	/**

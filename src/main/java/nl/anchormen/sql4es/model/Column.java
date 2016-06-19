@@ -13,7 +13,7 @@ import nl.anchormen.sql4es.model.expression.ICalculation;
  */
 public class Column implements Comparable<Column>{
 	
-	public enum Operation {NONE, AVG, SUM, MIN, MAX, COUNT, HIGHLIGHT,DATE_HISTOGRAM}
+	public enum Operation {NONE, AVG, SUM, MIN, MAX, COUNT, HIGHLIGHT,DATE_HISTOGRAM,GROWTH}
 	
 	private String columnName;
 	private String tableName;

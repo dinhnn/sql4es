@@ -175,7 +175,11 @@ public class QueryParser extends AstVisitor<ParseResult, Object>{
 					AggregationBuilder agg = groupParser.addDistinctAggregation(state2);
 					result.setAggregation(agg);
 				}
-			}else throw new SQLException("Unable to merge the Sub query with the top query");
+			} else {
+				subQuery.setParent(result);
+				result = subQuery;
+			}
+			//else throw new SQLException("Unable to merge the Sub query with the top query");
 		}catch(SQLException e){
 			return new ParseResult(e);
 		}

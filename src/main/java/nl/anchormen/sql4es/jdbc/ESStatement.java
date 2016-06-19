@@ -6,6 +6,8 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLWarning;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import com.facebook.presto.sql.parser.SqlParser;
@@ -17,15 +19,18 @@ import com.facebook.presto.sql.tree.DropTable;
 import com.facebook.presto.sql.tree.DropView;
 import com.facebook.presto.sql.tree.Explain;
 import com.facebook.presto.sql.tree.Insert;
+import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.Use;
 
+import nl.anchormen.sql4es.ESPipelineResultSet;
 import nl.anchormen.sql4es.ESQueryState;
 import nl.anchormen.sql4es.ESResultSet;
 import nl.anchormen.sql4es.ESUpdateState;
 import nl.anchormen.sql4es.model.Column;
 import nl.anchormen.sql4es.model.Heading;
 import nl.anchormen.sql4es.model.Utils;
+import nl.anchormen.sql4es.parse.sql.ParseResult;
 
 public class ESStatement implements Statement {
 
@@ -64,8 +69,81 @@ public class ESStatement implements Statement {
 		com.facebook.presto.sql.tree.Statement statement = parser.createStatement(sql);
 		if(statement instanceof Query){
 			if(this.result != null) this.result.close();
-			queryState.buildRequest(sql, ((Query)statement).getQueryBody(), connection.getSchema());
+			ParseResult parseResult = queryState.buildRequest(sql, ((Query)statement).getQueryBody(), connection.getSchema());
 			this.result = queryState.execute();
+			while((parseResult = parseResult.getParent())!=null){
+        ESPipelineResultSet resultSet = new ESPipelineResultSet(parseResult.getHeading(),this.result);
+				for(Column column:parseResult.getHeading().columns()) {
+					if(column.getOp()==null) throw new SQLException("Unsupport");
+					switch (column.getOp()){
+						case MAX:
+							Double max = null;
+							while(this.result.next()){
+								double num = this.result.getDouble(column.getColumn());
+								max = max==null?num:Math.max(num,max);
+							}
+              resultSet.add(max);
+							this.result.beforeFirst();
+							break;
+						case MIN:
+							Double min = null;
+							while(this.result.next()){
+								double num = this.result.getDouble(column.getColumn());
+								min = min==null?num:Math.max(num,min);
+							}
+              resultSet.add(min);
+							this.result.beforeFirst();
+							break;
+						case AVG:
+							double sum = 0;
+							int count=0;
+							while(this.result.next()){
+								double num = this.result.getDouble(column.getColumn());
+								sum+=num;
+								count++;
+							}
+              resultSet.add(count==0?null:sum/count);
+							this.result.beforeFirst();
+							break;
+            case GROWTH:
+              double avgX = 0; double avgY = 0; double avgXY = 0; double avgXX = 0;
+              int n = 0;
+
+              String knowX = null;
+              double newX=0;
+              List<Object> opArgs = column.getOpArgs();
+              if(opArgs!=null && opArgs.size()>1){
+                knowX = opArgs.get(0).toString();
+                newX = ((Number)opArgs.get(1)).doubleValue();
+              }
+              String knowY = column.getColumn();
+
+              while(this.result.next()){
+                double x;
+
+                if(knowX==null){
+                  x = n;
+                } else {
+                  Object ox = this.result.getObject(knowX);
+                  if(ox instanceof Date)x = ((Date)ox).getTime();
+                  else if(ox instanceof Number)x = ((Number)ox).doubleValue();
+                  else x = n;
+                }
+                double y = Math.log(this.result.getDouble(knowY));
+                avgX += x; avgY += y; avgXY += x*y; avgXX += x*x;
+                n++;
+              }
+              if(knowX==null)newX = n;
+              avgX /= n; avgY /= n; avgXY /= n; avgXX /= n;
+
+              double beta = (avgXY - avgX*avgY) / (avgXX - avgX*avgX);
+              double alpha = avgY - beta*avgX;
+              resultSet.add(Math.exp( alpha + beta * newX));
+              break;
+					}
+				}
+				this.result = resultSet;
+			}
 			return this.result;
 		}else if(statement instanceof Explain){
 			String ex = queryState.explain(sql, (Explain)statement, connection.getSchema());

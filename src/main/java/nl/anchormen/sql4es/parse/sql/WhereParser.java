@@ -227,7 +227,7 @@ public class WhereParser extends AstVisitor<QueryWrapper, QueryState>{
 	 * @param state
 	 * @return a Long, Boolean, Double or String object
 	 */
-	private Object getLiteralValue(Expression expression, final QueryState state){
+	public static Object getLiteralValue(Expression expression, final QueryState state){
 		if(expression instanceof LongLiteral) return ((LongLiteral)expression).getValue();
 		else if(expression instanceof BooleanLiteral) return ((BooleanLiteral)expression).getValue();
 		else if(expression instanceof DoubleLiteral) return ((DoubleLiteral)expression).getValue();

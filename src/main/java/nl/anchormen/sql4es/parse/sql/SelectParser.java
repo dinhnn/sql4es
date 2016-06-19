@@ -3,18 +3,6 @@ package nl.anchormen.sql4es.parse.sql;
 import com.facebook.presto.sql.tree.ArithmeticBinaryExpression;
 import com.facebook.presto.sql.tree.ArithmeticUnaryExpression;
 import com.facebook.presto.sql.tree.ArithmeticUnaryExpression.Sign;
-
-import nl.anchormen.sql4es.ESQueryState;
-import nl.anchormen.sql4es.QueryState;
-import nl.anchormen.sql4es.model.Column;
-import nl.anchormen.sql4es.model.Heading;
-import nl.anchormen.sql4es.model.QuerySource;
-import nl.anchormen.sql4es.model.Column.Operation;
-import nl.anchormen.sql4es.model.expression.ColumnReference;
-import nl.anchormen.sql4es.model.expression.ICalculation;
-import nl.anchormen.sql4es.model.expression.SimpleCalculation;
-import nl.anchormen.sql4es.model.expression.SingleValue;
-
 import com.facebook.presto.sql.tree.AstVisitor;
 import com.facebook.presto.sql.tree.DereferenceExpression;
 import com.facebook.presto.sql.tree.DoubleLiteral;
@@ -26,6 +14,19 @@ import com.facebook.presto.sql.tree.SelectItem;
 import com.facebook.presto.sql.tree.SingleColumn;
 import com.facebook.presto.sql.tree.StringLiteral;
 import com.facebook.presto.sql.tree.SubscriptExpression;
+import nl.anchormen.sql4es.ESQueryState;
+import nl.anchormen.sql4es.QueryState;
+import nl.anchormen.sql4es.model.Column;
+import nl.anchormen.sql4es.model.Column.Operation;
+import nl.anchormen.sql4es.model.Heading;
+import nl.anchormen.sql4es.model.QuerySource;
+import nl.anchormen.sql4es.model.expression.ColumnReference;
+import nl.anchormen.sql4es.model.expression.ICalculation;
+import nl.anchormen.sql4es.model.expression.SimpleCalculation;
+import nl.anchormen.sql4es.model.expression.SingleValue;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parses the SELECT part of the SQL and is responsible to fill the {@link Heading} object within the passed {@link ESQueryState}.
@@ -91,11 +92,30 @@ public class SelectParser extends AstVisitor<Object, QueryState>{
 				 column = ((QualifiedNameReference)fc.getArguments().get(0)).getName().toString();
 			}
 			try{
-				return createColumn(column, Operation.valueOf(operator.trim().toUpperCase()), state, "select.+", ".+from");
+				Column rs = createColumn(column, Operation.valueOf(operator.trim().toUpperCase()), state, "select.+", ".+from");
+				List<Expression> args = fc.getArguments();
+				if (args.size() > 1) {
+					List<Object> opArgs = new ArrayList<>();
+					for (int i = 1; i < args.size(); i++) {
+						opArgs.add(args.get(i).accept(new AstVisitor() {
+							@Override
+							protected Object visitExpression(Expression node, Object context) {
+								if (node instanceof QualifiedNameReference) {
+									return ((QualifiedNameReference) node).getName();
+								}
+								return WhereParser.getLiteralValue(node,state);
+							}
+						}, state));
+					}
+					rs.setOpArgs(opArgs);
+				}
+				return rs;
 			}catch(Exception e){
 				state.addException("Unable to parse function due to: "+e.getMessage());
 				return null;
 			}
+
+
 		}else if(node instanceof ArithmeticBinaryExpression){
 			// resolve expressions within select such as (sum(x)/10)%3
 			String colName = ((ArithmeticBinaryExpression)node).toString().trim().replaceAll("\"", "");

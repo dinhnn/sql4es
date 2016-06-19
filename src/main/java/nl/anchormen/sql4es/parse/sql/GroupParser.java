@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.facebook.presto.sql.tree.QualifiedNameReference;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
@@ -41,7 +42,7 @@ public class GroupParser extends SelectParser {
             List<Expression> args = ((FunctionCall) e).getArguments();
             if (args.size() > 1) {
               List<Object> opArgs = new ArrayList<>();
-              for (int i = 1; i < args.size(); i++) {                
+              for (int i = 1; i < args.size(); i++) {
                 opArgs.add(args.get(i).accept(new AstVisitor() {
                   @Override
                   protected Object visitExpression(Expression node, Object context) {
